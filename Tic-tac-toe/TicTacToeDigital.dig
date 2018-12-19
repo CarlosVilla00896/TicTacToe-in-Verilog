@@ -1,0 +1,1934 @@
+<?xml version="1.0" encoding="utf-8"?>
+<circuit>
+  <version>1</version>
+  <attributes/>
+  <visualElements>
+    <visualElement>
+      <elementName>External</elementName>
+      <elementAttributes>
+        <entry>
+          <string>applicationType</string>
+          <appType>IVERILOG</appType>
+        </entry>
+        <entry>
+          <string>Label</string>
+          <string>TicTacToe</string>
+        </entry>
+        <entry>
+          <string>externalInputs</string>
+          <string>clk,reset,player1,player2,player1_posiciones:4,player2_posiciones:4</string>
+        </entry>
+        <entry>
+          <string>Width</string>
+          <int>12</int>
+        </entry>
+        <entry>
+          <string>externalOutputs</string>
+          <string>pos1:2,pos2:2,pos3:2,pos4:2,pos5:2,pos6:2,pos7:2,pos8:2,pos9:2,winner_player:2</string>
+        </entry>
+        <entry>
+          <string>Code</string>
+          <string>module TicTacToe(
+    input clk,
+    input reset, //boton reset
+    input player1, //boton para que el player1 juegue
+    input player2, //boton para que el player2 juegue
+    input [3:0] player1_posiciones, 
+    input [3:0] player2_posiciones,
+    output [1:0] pos1,
+    output [1:0] pos2,
+    output [1:0] pos3,
+    output [1:0] pos4,
+    output [1:0] pos5,
+    output [1:0] pos6,
+    output [1:0] pos7,
+    output [1:0] pos8,
+    output [1:0] pos9,
+    output [1:0] winner_player
+);
+
+    wire [15:0] player1_posicionesp;
+    wire [15:0] player2_posicionesp;
+    wire illegal_move;
+    wire winner;
+    wire player1_turn;
+    wire player2_turn;
+    wire sin_espacio;
+
+    Registro_Posiciones registro_pos(
+        clk,
+        reset,
+        illegal_move,
+        player1_posicionesp [8:0],
+        player2_posicionesp [8:0],
+        pos1,
+        pos2,
+        pos3,
+        pos4,
+        pos5,
+        pos6,
+        pos7,
+        pos8,
+        pos9
+    );
+
+    Ganador ganador(
+        pos1, pos2,pos3,pos4,pos5,pos6,pos7,pos8,pos9, winner, winner_player
+    );
+
+    Posiciones p1_decodificar (player1_posiciones, player1_turn, player1_posicionesp );
+
+    Posiciones p2_decodificador (player2_posiciones, player2_turn, player2_posicionesp);
+
+    Movimiento_ilegal mov_ilegal (pos1, pos2, pos3, pos4, pos5, pos6, pos7, pos8, pos9, 
+                                    player1_posicionesp[8:0], player2_posicionesp[8:0], illegal_move);
+
+    Detector_de_espacio de (pos1,pos2,pos3,pos4,pos5,pos6,pos7,pos8,pos9,sin_espacio);
+    fsm_controller maquina_estado( 
+        reset,
+        clk,
+        player1,
+        player2,
+        illegal_move,
+        sin_espacio,
+        winner,
+        player1_turn,
+        player2_turn
+    );
+
+endmodule // TicTacToe
+
+//fsm original
+module fsm_controller(
+    input reset,// clk of the circuit 
+    input clk,// reset 
+    player1, // player plays 
+    player2,// computer plays 
+    illegal_move,// illegal move detected 
+    no_space, // no_space detected 
+    winner, // winner detected 
+    output reg player1_turn, // enable computer to player1 
+    player2_turn // enable player to player1 
+);
+    // FSM States 
+    parameter IDLE=2&apos;b00;
+    parameter PLAYER=2&apos;b01;
+    parameter COMPUTER=2&apos;b10;
+    parameter GAME_DONE=2&apos;b11;
+    reg[1:0] curr_state, next_state;
+    // current state registers 
+    always @(posedge clk or posedge reset) 
+    begin 
+        if(reset)
+        curr_state &lt;= IDLE;
+        else 
+        curr_state &lt;= next_state;
+    end 
+    // next state 
+    always @(*)
+    begin
+        case(curr_state)
+            IDLE: begin 
+                if(reset==1&apos;b0 &amp;&amp; player1 == 1&apos;b1)
+                    next_state &lt;= PLAYER; // player to player1 
+                else 
+                    next_state &lt;= IDLE;
+                    player1_turn &lt;= 1&apos;b0;
+                    player2_turn &lt;= 1&apos;b0;
+            end 
+            PLAYER:begin 
+                player1_turn &lt;= 1&apos;b1;
+                player2_turn &lt;= 1&apos;b0;
+                if(illegal_move==1&apos;b0)
+                    next_state &lt;= COMPUTER; // computer to player1 
+                else 
+                    next_state &lt;= IDLE;
+            end 
+            COMPUTER:begin 
+                player1_turn &lt;= 1&apos;b0;
+                if(player2==1&apos;b0) begin 
+                    next_state &lt;= COMPUTER;
+                    player2_turn &lt;= 1&apos;b0;
+                end
+                else if(winner==1&apos;b0 &amp;&amp; no_space == 1&apos;b0)
+                begin 
+                    next_state &lt;= IDLE;
+                    player2_turn &lt;= 1&apos;b1;// computer to player1 when PC=1
+                end 
+                else if(no_space == 1 || winner ==1&apos;b1)
+                begin 
+                    next_state &lt;= GAME_DONE; // game done 
+                    player2_turn &lt;= 1&apos;b1;// computer to player1 when PC=1
+                end  
+            end 
+            GAME_DONE:begin // game done
+                player1_turn &lt;= 1&apos;b0;
+                player2_turn &lt;= 1&apos;b0; 
+                if(reset==1&apos;b1) 
+                    next_state &lt;= IDLE;// reset the game to IDLE 
+                else 
+                    next_state &lt;= GAME_DONE;  
+            end 
+            default: next_state &lt;= IDLE; 
+        endcase
+    end
+endmodule 
+
+//Registro de las posiciones
+
+module Registro_Posiciones (
+    input clk,
+    input reset,
+    input illegal_move,
+    input [8:0] player1_p,
+    input [8:0] player2_p,
+    output reg [1:0] pos1, 
+    output reg [1:0] pos2, 
+    output reg [1:0] pos3, 
+    output reg [1:0] pos4, 
+    output reg [1:0] pos5, 
+    output reg [1:0] pos6, 
+    output reg [1:0] pos7, 
+    output reg [1:0] pos8, 
+    output reg [1:0] pos9
+);
+/*  Se debe evaluar si ha se ha apretado el boton de reset o si es un movimiento ilegal
+    si no es movimiento ilegal entonces se evalua si el que juega es el player1 o el player2
+    y en que posicion quiere jugar, luego se registra 01 cuando es player1 o 10 cuando es player2.
+    hay que hacer esto por cada posicion (cada bit dentro del arreglo de 9 bits para p1 y p2), 
+    es acá donde son utiles las señales del decodificador.
+*/
+//posicion 1
+always @ (posedge clk or posedge reset)
+begin
+    if(reset)
+        pos1 &lt;= 2&apos;b00;
+    else 
+        begin
+            if(illegal_move == 1&apos;b1)
+                pos1 &lt;= pos1; // se mantiene la posicion si es movimiento ilegal
+            else if(player1_p[0] == 1&apos;b1 )//si el bit en esta posicion del player1 esta encendido...
+                pos1 &lt;= 2&apos;b01;
+            else if (player2_p[0] == 1&apos;b1)//si el bit en esta posicion del player2 esta encendido...
+                pos1 &lt;= 2&apos;b10;
+            else
+                pos1 &lt;= pos1;
+        end
+end
+
+//posicion 2
+always @ (posedge clk or posedge reset)
+begin
+    if(reset)
+        pos2 &lt;= 2&apos;b00;
+    else 
+        begin
+            if(illegal_move == 1&apos;b1)
+                pos2 &lt;= pos2; // se mantiene la posicion si es movimiento ilegal
+            else if(player1_p[1] == 1&apos;b1)//si el bit en esta posicion del player1 esta encendido...
+                pos2 &lt;= 2&apos;b01;
+            else if (player2_p[1] == 1&apos;b1)//si el bit en esta posicion del player2 esta encendido...
+                pos2 &lt;= 2&apos;b10;
+            else
+                pos2 &lt;= pos2;
+        end
+end
+
+//posicion 3
+always @ (posedge clk or posedge reset)
+begin
+    if(reset)
+        pos3 &lt;= 2&apos;b00;
+    else 
+        begin
+            if(illegal_move == 1&apos;b1)
+                pos3 &lt;= pos3; // se mantiene la posicion si es movimiento ilegal
+            else if(player1_p[2] == 1&apos;b1)//si el bit en esta posicion del player1 esta encendido...
+                pos3 &lt;= 2&apos;b01;
+            else if(player2_p[2] == 1&apos;b1) //si el bit en esta posicion del player2 esta encendido...
+                pos3 &lt;= 2&apos;b10;
+            else
+                pos3 &lt;= pos3;
+        end
+end
+
+//posicion 4
+always @ (posedge clk or posedge reset)
+begin
+    if(reset)
+        pos4 &lt;= 2&apos;b00;
+    else 
+        begin
+            if(illegal_move == 1&apos;b1)
+                pos4 &lt;= pos4; // se mantiene la posicion si es movimiento ilegal
+            else if(player1_p[3] == 1&apos;b1)//si el bit en esta posicion del player1 esta encendido...
+                pos4 &lt;= 2&apos;b01;
+            else if (player2_p[3] == 1&apos;b1)//si el bit en esta posicion del player2 esta encendido...
+                pos4 &lt;= 2&apos;b10;
+            else
+                pos4 &lt;= pos4;
+        end
+end
+
+//posicion 5
+always @ (posedge clk or posedge reset)
+begin
+    if(reset)
+        pos5 &lt;= 2&apos;b00;
+    else 
+        begin
+            if(illegal_move == 1&apos;b1)
+                pos5 &lt;= pos5; // se mantiene la posicion si es movimiento ilegal
+            else if(player1_p[4] == 1&apos;b1)//si el bit en esta posicion del player1 esta encendido...
+                pos5 &lt;= 2&apos;b01;
+            else if (player2_p[4] == 1&apos;b1)//si el bit en esta posicion del player2 esta encendido...
+                pos5 &lt;= 2&apos;b10;
+            else
+                pos5 &lt;= pos5;
+        end
+end
+
+//posicion 6
+always @ (posedge clk or posedge reset)
+begin
+    if(reset)
+        pos6 &lt;= 2&apos;b00;
+    else 
+        begin
+            if(illegal_move == 1&apos;b1)
+                pos6 &lt;= pos6; // se mantiene la posicion si es movimiento ilegal
+            else if(player1_p[5] == 1&apos;b1)//si el bit en esta posicion del player1 esta encendido...
+                pos6 &lt;= 2&apos;b01;
+            else if (player2_p[5] == 1&apos;b1)//si el bit en esta posicion del player2 esta encendido...
+                pos6 &lt;= 2&apos;b10;
+            else
+                pos6 &lt;= pos6;
+        end
+end
+
+//posicion 7
+always @ (posedge clk or posedge reset)
+begin
+    if(reset)
+        pos7 &lt;= 2&apos;b00;
+    else 
+        begin
+            if(illegal_move == 1&apos;b1)
+                pos7 &lt;= pos7; // se mantiene la posicion si es movimiento ilegal
+            else if(player1_p[6] == 1&apos;b1)//si el bit en esta posicion del player1 esta encendido...
+                pos7 &lt;= 2&apos;b01;
+            else if (player2_p[6] == 1&apos;b1)//si el bit en esta posicion del player2 esta encendido...
+                pos7 &lt;= 2&apos;b10;
+            else
+                pos7 &lt;= pos7;
+        end
+end
+
+//posicion 8
+always @ (posedge clk or posedge reset)
+begin
+    if(reset)
+        pos8 &lt;= 2&apos;b00;
+    else 
+        begin
+            if(illegal_move == 1&apos;b1)
+                pos8 &lt;= pos8; // se mantiene la posicion si es movimiento ilegal
+            else if(player1_p[7] == 1&apos;b1)//si el bit en esta posicion del player1 esta encendido...
+                pos8 &lt;= 2&apos;b01;
+            else if (player2_p[7] == 1&apos;b1)//si el bit en esta posicion del player2 esta encendido...
+                pos8 &lt;= 2&apos;b10;
+            else
+                pos8 &lt;= pos8;
+        end
+end
+
+//posicion 9
+always @ (posedge clk or posedge reset)
+begin
+    if(reset)
+        pos9 &lt;= 2&apos;b00;
+    else 
+        begin
+            if(illegal_move == 1&apos;b1)
+                pos9 &lt;= pos9; // se mantiene la posicion si es movimiento ilegal
+            else if(player1_p[8] == 1&apos;b1)//si el bit en esta posicion del player1 esta encendido...
+                pos9 &lt;= 2&apos;b01;
+            else if (player2_p[8] == 1&apos;b1)//si el bit en esta posicion del player2 esta encendido...
+                pos9 &lt;= 2&apos;b10;
+            else
+                pos9 &lt;= pos9;
+        end
+end
+
+endmodule //
+
+//decoder
+
+module Posiciones(
+    input[3:0] posiciones_tablero, 
+    input enable, 
+    output wire [15:0] out_en
+);
+    reg[15:0] temp1;
+    assign out_en = (enable==1&apos;b1)?temp1:16&apos;d0;
+
+    /*se decodifican las posiciones para que el proceso de detectar espacio, movimiento ilegal y 
+        ganador sea mas facil al analizar bit encendido por posicion. 
+        Recordar que se usan registros de 4 bits para almacenar la2 9 combinaciones de las 9 posiciones
+        el mayor valor representado por los 4 bits son 16 valores, es por eso que se codifican
+        los 16 valores de los cuales luego solo se usan 9.
+    */
+
+    always @(*)
+    begin
+        case(posiciones_tablero)
+            4&apos;d0: temp1 &lt;= 16&apos;b0000000000000001;
+            4&apos;d1: temp1 &lt;= 16&apos;b0000000000000010; 
+            4&apos;d2: temp1 &lt;= 16&apos;b0000000000000100;
+            4&apos;d3: temp1 &lt;= 16&apos;b0000000000001000;
+            4&apos;d4: temp1 &lt;= 16&apos;b0000000000010000;
+            4&apos;d5: temp1 &lt;= 16&apos;b0000000000100000;
+            4&apos;d6: temp1 &lt;= 16&apos;b0000000001000000;
+            4&apos;d7: temp1 &lt;= 16&apos;b0000000010000000;
+            4&apos;d8: temp1 &lt;= 16&apos;b0000000100000000;
+            4&apos;d9: temp1 &lt;= 16&apos;b0000001000000000;
+            4&apos;d10: temp1 &lt;= 16&apos;b0000010000000000;
+            4&apos;d11: temp1 &lt;= 16&apos;b0000100000000000;
+            4&apos;d12: temp1 &lt;= 16&apos;b0001000000000000;
+            4&apos;d13: temp1 &lt;= 16&apos;b0010000000000000;
+            4&apos;d14: temp1 &lt;= 16&apos;b0100000000000000;
+            4&apos;d15: temp1 &lt;= 16&apos;b1000000000000000;
+            default: temp1 &lt;= 16&apos;b0000000000000001; 
+        endcase 
+    end 
+endmodule 
+
+//Ganador
+
+module Ganador(
+    input[1:0] pos1,
+    input[1:0] pos2,
+    input[1:0] pos3,
+    input[1:0] pos4,
+    input[1:0] pos5,
+    input[1:0] pos6,
+    input[1:0] pos7,
+    input[1:0] pos8,
+    input[1:0] pos9,
+    output winner,
+    output [1:0] winner_player
+    
+);
+    /*Las condiciones en las que se gana son cuando se hace 3 en linea:
+        (1,2,3), (4,5,6), (7,8,9), (1,4,7),(2,5,8), (3,6,9), (1,5,9), (3,5,7)
+     */
+    wire win1, win2, win3, win4, win5, win6, win7, win8;
+    wire [1:0] winner_player1, winner_player2, winner_player3, winner_player4,winner_player5, winner_player6,winner_player7,winner_player8;
+
+    Ganador_AUX f1(pos1, pos2, pos3, win1, winner_player1); //(1,2,3)
+    Ganador_AUX f2(pos4, pos5, pos6, win2, winner_player2); //(4,5,6)
+    Ganador_AUX f3(pos7, pos8, pos9, win3, winner_player3); //(7,8,9)
+    Ganador_AUX f4(pos1, pos4, pos7, win4, winner_player4); //(1,4,7)
+    Ganador_AUX f5(pos2, pos5, pos8, win5, winner_player5); //(2,5,8)
+    Ganador_AUX f6(pos3, pos6, pos9, win6, winner_player6); //(3,6,9)
+    Ganador_AUX f7(pos1, pos5, pos9, win7, winner_player7); //(1,5,9)
+    Ganador_AUX f8(pos3, pos5, pos7, win8, winner_player8); //(3,5,7)
+
+    assign winner = (((((((win1 | win2) | win3) | win4) | win5) | win6) | win7) | win8);
+    assign winner_player = (((((((winner_player1 | winner_player2) | winner_player3) 
+                                    | winner_player4) | winner_player5) | winner_player6) 
+                                    | winner_player7) | winner_player8);
+
+endmodule // Ganador
+
+module Ganador_AUX(
+    input [1:0] pos0,
+    input [1:0] pos1, 
+    input [1:0] pos2,
+    output winner,
+    output [1:0] winner_player
+);
+    wire [1:0] t0, t1, t2;
+    wire winner_;
+
+    assign t0[1] = !(pos0[1]^pos1[1]);
+    assign t0[0] = !(pos0[0]^pos1[0]);
+    assign t1[1] = !(pos2[1]^pos1[1]);
+    assign t1[0] = !(pos2[0]^pos1[0]);
+    assign t2[1] = t0[1] &amp; t1[1];
+    assign t2[0] = t0[0] &amp; t1[0];
+    assign winner_ = pos0[1] | pos0[0];
+    // winner if 3 positions are similar and should be 01 or 10 
+    assign winner = winner_ &amp; t2[1] &amp; t2[0];
+    // determine who the winner is 
+    assign winner_player[1] = winner &amp; pos0[1];
+    assign winner_player[0] = winner &amp; pos0[0];
+
+endmodule // Ganador_AUX
+
+//Detector espacios
+
+module Detector_de_espacio (
+    input [1:0] pos1,
+    input [1:0] pos2,
+    input [1:0] pos3,
+    input [1:0] pos4,
+    input [1:0] pos5,
+    input [1:0] pos6,
+    input [1:0] pos7,
+    input [1:0] pos8,
+    input [1:0] pos9,
+    output wire sin_espacio
+);
+
+wire pos1_space;
+wire pos2_space;
+wire pos3_space;
+wire pos4_space;
+wire pos5_space; 
+wire pos6_space;
+wire pos7_space;
+wire pos8_space;
+wire pos9_space;
+
+/*Si alguna de las posiciones está vacía el resultado de sin_espacio será 0 
+    pero si todas las posiciones están tomadas los pos_space serán 1 por lo tanto
+    sin_espacio será 1.
+*/
+
+assign pos1_space = pos1[1] | pos1[0];
+assign pos2_space = pos2[1] | pos2[0];
+assign pos3_space = pos3[1] | pos3[0];
+assign pos4_space = pos4[1] | pos4[0];
+assign pos5_space = pos5[1] | pos5[0];
+assign pos6_space = pos6[1] | pos6[0];
+assign pos7_space = pos7[1] | pos7[0];
+assign pos8_space = pos8[1] | pos8[0];
+assign pos9_space = pos9[1] | pos9[0];
+
+assign sin_espacio = ((((((((pos1_space &amp; pos2_space) &amp; pos3_space) &amp; pos4_space) 
+                            &amp; pos5_space) &amp; pos6_space) &amp; pos7_space) &amp; pos8_space) &amp; pos9_space);
+endmodule
+
+//Movimiento ilegal
+
+module Movimiento_ilegal(
+    input [1:0] pos1,
+    input [1:0] pos2,
+    input [1:0] pos3,
+    input [1:0] pos4,
+    input [1:0] pos5,
+    input [1:0] pos6,
+    input [1:0] pos7,
+    input [1:0] pos8,
+    input [1:0] pos9,
+    input [8:0] player1_p,
+    input [8:0] player2_p,
+    output wire illegal_move
+);
+
+    wire p1_mi1;
+    wire p1_mi2;
+    wire p1_mi3;
+    wire p1_mi4;
+    wire p1_mi5;
+    wire p1_mi6;
+    wire p1_mi7;
+    wire p1_mi8;
+    wire p1_mi9;
+
+    wire p2_mi1;
+    wire p2_mi2;
+    wire p2_mi3;
+    wire p2_mi4;
+    wire p2_mi5;
+    wire p2_mi6;
+    wire p2_mi7;
+    wire p2_mi8;
+    wire p2_mi9;
+
+    wire p1_mit;
+    wire p2_mit;
+    //cuando la posicion este tomada y un jugador quiera jugarla el resultado para p1_mi sera 1
+
+    //player1 movimiento ilegal por posicion
+    assign p1_mi1 = (pos1[1] | pos1[0]) &amp; player1_p[0];
+    assign p1_mi2 = (pos2[1] | pos2[0]) &amp; player1_p[1];
+    assign p1_mi3 = (pos3[1] | pos3[0]) &amp; player1_p[2];
+    assign p1_mi4 = (pos4[1] | pos4[0]) &amp; player1_p[3];
+    assign p1_mi5 = (pos5[1] | pos5[0]) &amp; player1_p[4];
+    assign p1_mi6 = (pos6[1] | pos6[0]) &amp; player1_p[5];
+    assign p1_mi7 = (pos7[1] | pos7[0]) &amp; player1_p[6];
+    assign p1_mi8 = (pos8[1] | pos8[0]) &amp; player1_p[7];
+    assign p1_mi9 = (pos9[1] | pos9[0]) &amp; player1_p[8];
+
+    //player2 movimiento ilegal por posicion
+    assign p2_mi1 = (pos1[1] | pos1[0]) &amp; player2_p[0];
+    assign p2_mi2 = (pos2[1] | pos2[0]) &amp; player2_p[1];
+    assign p2_mi3 = (pos3[1] | pos3[0]) &amp; player2_p[2];
+    assign p2_mi4 = (pos4[1] | pos4[0]) &amp; player2_p[3];
+    assign p2_mi5 = (pos5[1] | pos5[0]) &amp; player2_p[4];
+    assign p2_mi6 = (pos6[1] | pos6[0]) &amp; player2_p[5];
+    assign p2_mi7 = (pos7[1] | pos7[0]) &amp; player2_p[6];
+    assign p2_mi8 = (pos8[1] | pos8[0]) &amp; player2_p[7];
+    assign p2_mi9 = (pos9[1] | pos9[0]) &amp; player2_p[8];
+
+    //player1 y player2 movimiento ilegal
+    assign p1_mit = ((((((((p1_mi1 | p1_mi2 ) | p1_mi3) | p1_mi4) | p1_mi5) | p1_mi6) | p1_mi7) | p1_mi8) | p1_mi9); 
+    assign p2_mit = ((((((((p2_mi1 | p2_mi2 ) | p2_mi3) | p2_mi4) | p2_mi5) | p2_mi6) | p2_mi7) | p2_mi8) | p2_mi9);
+
+    //verificar si hay movimiento ilegal del player1 o player2
+    assign illegal_move = p1_mit | p2_mit;
+
+endmodule // Movimiento_ilegal</string>
+        </entry>
+      </elementAttributes>
+      <pos x="260" y="140"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Splitter</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Input Splitting</string>
+          <string>2</string>
+        </entry>
+        <entry>
+          <string>Output Splitting</string>
+          <string>1,1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="740" y="140"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Splitter</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Input Splitting</string>
+          <string>2</string>
+        </entry>
+        <entry>
+          <string>Output Splitting</string>
+          <string>1,1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="740" y="180"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Splitter</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Input Splitting</string>
+          <string>2</string>
+        </entry>
+        <entry>
+          <string>Output Splitting</string>
+          <string>1,1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="740" y="220"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Splitter</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Input Splitting</string>
+          <string>2</string>
+        </entry>
+        <entry>
+          <string>Output Splitting</string>
+          <string>1,1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="740" y="260"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Splitter</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Input Splitting</string>
+          <string>2</string>
+        </entry>
+        <entry>
+          <string>Output Splitting</string>
+          <string>1,1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="740" y="300"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Splitter</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Input Splitting</string>
+          <string>2</string>
+        </entry>
+        <entry>
+          <string>Output Splitting</string>
+          <string>1,1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="740" y="340"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Splitter</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Input Splitting</string>
+          <string>2</string>
+        </entry>
+        <entry>
+          <string>Output Splitting</string>
+          <string>1,1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="740" y="380"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Splitter</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Input Splitting</string>
+          <string>2</string>
+        </entry>
+        <entry>
+          <string>Output Splitting</string>
+          <string>1,1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="740" y="420"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Splitter</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Input Splitting</string>
+          <string>2</string>
+        </entry>
+        <entry>
+          <string>Output Splitting</string>
+          <string>1,1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="740" y="460"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Splitter</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Input Splitting</string>
+          <string>2</string>
+        </entry>
+        <entry>
+          <string>Output Splitting</string>
+          <string>1,1</string>
+        </entry>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="1"/>
+        </entry>
+      </elementAttributes>
+      <pos x="1100" y="620"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos1_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="140"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos1_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="160"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos2_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="180"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos2_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="200"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos3_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="220"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos3_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="240"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos4_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="260"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos4_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="280"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos5_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="300"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos5_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="320"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos6_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="340"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos6_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="360"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos7_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="380"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos7_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="400"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos8_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="420"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos8_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="440"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos9_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="460"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>NetName</string>
+          <string>pos9_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="480"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Clock</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>clk</string>
+        </entry>
+        <entry>
+          <string>Frequency</string>
+          <int>100000000</int>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>V10</string>
+        </entry>
+        <entry>
+          <string>runRealTime</string>
+          <boolean>true</boolean>
+        </entry>
+      </elementAttributes>
+      <pos x="180" y="100"/>
+    </visualElement>
+    <visualElement>
+      <elementName>In</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>reset</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>K18</string>
+        </entry>
+      </elementAttributes>
+      <pos x="180" y="140"/>
+    </visualElement>
+    <visualElement>
+      <elementName>In</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>player1</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>K17</string>
+        </entry>
+      </elementAttributes>
+      <pos x="180" y="180"/>
+    </visualElement>
+    <visualElement>
+      <elementName>In</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>player2</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>L17</string>
+        </entry>
+      </elementAttributes>
+      <pos x="180" y="220"/>
+    </visualElement>
+    <visualElement>
+      <elementName>In</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>player1_posiciones</string>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>4</int>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>C17,C18,D17,E18</string>
+        </entry>
+        <entry>
+          <string>intFormat</string>
+          <intFormat>dec</intFormat>
+        </entry>
+      </elementAttributes>
+      <pos x="180" y="260"/>
+    </visualElement>
+    <visualElement>
+      <elementName>In</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>player2_posiciones</string>
+        </entry>
+        <entry>
+          <string>Bits</string>
+          <int>4</int>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>E18,E16F18,F17</string>
+        </entry>
+        <entry>
+          <string>intFormat</string>
+          <intFormat>dec</intFormat>
+        </entry>
+      </elementAttributes>
+      <pos x="180" y="300"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Text</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Description</string>
+          <string>board:MimasV2</string>
+        </entry>
+      </elementAttributes>
+      <pos x="780" y="20"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos1_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1000" y="180"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos1_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1000" y="220"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos2_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1200" y="180"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos2_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1200" y="220"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos3_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1420" y="180"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos3_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1420" y="220"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos4_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1000" y="280"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos4_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1000" y="320"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos5_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1200" y="280"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos5_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1200" y="320"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos6_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1420" y="280"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos6_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1420" y="320"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos7_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1000" y="380"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos7_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1000" y="420"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos8_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1200" y="380"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos8_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1200" y="420"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos9_0</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1420" y="380"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Tunnel</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="2"/>
+        </entry>
+        <entry>
+          <string>NetName</string>
+          <string>pos9_1</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1420" y="420"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos1_0</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>U7</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1020" y="180"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos1_1</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>V7</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1020" y="220"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos4_0</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>R3</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1020" y="280"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos4_1</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>T33</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1020" y="320"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos7_0</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>R5</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1020" y="380"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos7_1</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>T5</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1020" y="420"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos2_0</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>T4</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1220" y="180"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos2_1</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>V4</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1220" y="220"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos5_0</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>U8</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1220" y="280"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos5_1</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>V8</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1220" y="320"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos8_0</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>T9</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1220" y="380"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos8_1</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>V9</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1220" y="420"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos3_0</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>U5</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1440" y="180"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos3_1</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>V5</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1440" y="220"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos6_0</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>R8</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1440" y="280"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos6_1</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>T8</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1440" y="320"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos9_0</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>R11</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1440" y="380"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>Label</string>
+          <string>pos9_1</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>T11</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1440" y="420"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="1"/>
+        </entry>
+        <entry>
+          <string>Label</string>
+          <string>winner_1</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>R10</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1080" y="560"/>
+    </visualElement>
+    <visualElement>
+      <elementName>Out</elementName>
+      <elementAttributes>
+        <entry>
+          <string>rotation</string>
+          <rotation rotation="1"/>
+        </entry>
+        <entry>
+          <string>Label</string>
+          <string>winner_0</string>
+        </entry>
+        <entry>
+          <string>pinNumber</string>
+          <string>T10</string>
+        </entry>
+      </elementAttributes>
+      <pos x="1120" y="560"/>
+    </visualElement>
+  </visualElements>
+  <wires>
+    <wire>
+      <p1 x="500" y="160"/>
+      <p2 x="560" y="160"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="160"/>
+      <p2 x="780" y="160"/>
+    </wire>
+    <wire>
+      <p1 x="200" y="160"/>
+      <p2 x="260" y="160"/>
+    </wire>
+    <wire>
+      <p1 x="500" y="320"/>
+      <p2 x="540" y="320"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="320"/>
+      <p2 x="780" y="320"/>
+    </wire>
+    <wire>
+      <p1 x="1000" y="320"/>
+      <p2 x="1020" y="320"/>
+    </wire>
+    <wire>
+      <p1 x="1200" y="320"/>
+      <p2 x="1220" y="320"/>
+    </wire>
+    <wire>
+      <p1 x="1420" y="320"/>
+      <p2 x="1440" y="320"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="480"/>
+      <p2 x="780" y="480"/>
+    </wire>
+    <wire>
+      <p1 x="540" y="640"/>
+      <p2 x="1100" y="640"/>
+    </wire>
+    <wire>
+      <p1 x="660" y="260"/>
+      <p2 x="740" y="260"/>
+    </wire>
+    <wire>
+      <p1 x="500" y="260"/>
+      <p2 x="600" y="260"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="260"/>
+      <p2 x="780" y="260"/>
+    </wire>
+    <wire>
+      <p1 x="180" y="260"/>
+      <p2 x="220" y="260"/>
+    </wire>
+    <wire>
+      <p1 x="580" y="420"/>
+      <p2 x="740" y="420"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="420"/>
+      <p2 x="780" y="420"/>
+    </wire>
+    <wire>
+      <p1 x="1000" y="420"/>
+      <p2 x="1020" y="420"/>
+    </wire>
+    <wire>
+      <p1 x="1200" y="420"/>
+      <p2 x="1220" y="420"/>
+    </wire>
+    <wire>
+      <p1 x="1420" y="420"/>
+      <p2 x="1440" y="420"/>
+    </wire>
+    <wire>
+      <p1 x="180" y="100"/>
+      <p2 x="220" y="100"/>
+    </wire>
+    <wire>
+      <p1 x="500" y="200"/>
+      <p2 x="660" y="200"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="200"/>
+      <p2 x="780" y="200"/>
+    </wire>
+    <wire>
+      <p1 x="200" y="200"/>
+      <p2 x="260" y="200"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="360"/>
+      <p2 x="780" y="360"/>
+    </wire>
+    <wire>
+      <p1 x="500" y="140"/>
+      <p2 x="540" y="140"/>
+    </wire>
+    <wire>
+      <p1 x="720" y="140"/>
+      <p2 x="740" y="140"/>
+    </wire>
+    <wire>
+      <p1 x="560" y="140"/>
+      <p2 x="700" y="140"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="140"/>
+      <p2 x="780" y="140"/>
+    </wire>
+    <wire>
+      <p1 x="220" y="140"/>
+      <p2 x="260" y="140"/>
+    </wire>
+    <wire>
+      <p1 x="180" y="140"/>
+      <p2 x="200" y="140"/>
+    </wire>
+    <wire>
+      <p1 x="640" y="300"/>
+      <p2 x="740" y="300"/>
+    </wire>
+    <wire>
+      <p1 x="500" y="300"/>
+      <p2 x="560" y="300"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="300"/>
+      <p2 x="780" y="300"/>
+    </wire>
+    <wire>
+      <p1 x="180" y="300"/>
+      <p2 x="240" y="300"/>
+    </wire>
+    <wire>
+      <p1 x="560" y="460"/>
+      <p2 x="740" y="460"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="460"/>
+      <p2 x="780" y="460"/>
+    </wire>
+    <wire>
+      <p1 x="500" y="240"/>
+      <p2 x="620" y="240"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="240"/>
+      <p2 x="780" y="240"/>
+    </wire>
+    <wire>
+      <p1 x="240" y="240"/>
+      <p2 x="260" y="240"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="400"/>
+      <p2 x="780" y="400"/>
+    </wire>
+    <wire>
+      <p1 x="700" y="180"/>
+      <p2 x="740" y="180"/>
+    </wire>
+    <wire>
+      <p1 x="500" y="180"/>
+      <p2 x="680" y="180"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="180"/>
+      <p2 x="780" y="180"/>
+    </wire>
+    <wire>
+      <p1 x="180" y="180"/>
+      <p2 x="260" y="180"/>
+    </wire>
+    <wire>
+      <p1 x="1000" y="180"/>
+      <p2 x="1020" y="180"/>
+    </wire>
+    <wire>
+      <p1 x="1200" y="180"/>
+      <p2 x="1220" y="180"/>
+    </wire>
+    <wire>
+      <p1 x="1420" y="180"/>
+      <p2 x="1440" y="180"/>
+    </wire>
+    <wire>
+      <p1 x="620" y="340"/>
+      <p2 x="740" y="340"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="340"/>
+      <p2 x="780" y="340"/>
+    </wire>
+    <wire>
+      <p1 x="500" y="280"/>
+      <p2 x="580" y="280"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="280"/>
+      <p2 x="780" y="280"/>
+    </wire>
+    <wire>
+      <p1 x="1000" y="280"/>
+      <p2 x="1020" y="280"/>
+    </wire>
+    <wire>
+      <p1 x="1200" y="280"/>
+      <p2 x="1220" y="280"/>
+    </wire>
+    <wire>
+      <p1 x="1420" y="280"/>
+      <p2 x="1440" y="280"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="440"/>
+      <p2 x="780" y="440"/>
+    </wire>
+    <wire>
+      <p1 x="1080" y="600"/>
+      <p2 x="1100" y="600"/>
+    </wire>
+    <wire>
+      <p1 x="540" y="60"/>
+      <p2 x="720" y="60"/>
+    </wire>
+    <wire>
+      <p1 x="680" y="220"/>
+      <p2 x="740" y="220"/>
+    </wire>
+    <wire>
+      <p1 x="500" y="220"/>
+      <p2 x="640" y="220"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="220"/>
+      <p2 x="780" y="220"/>
+    </wire>
+    <wire>
+      <p1 x="180" y="220"/>
+      <p2 x="200" y="220"/>
+    </wire>
+    <wire>
+      <p1 x="220" y="220"/>
+      <p2 x="260" y="220"/>
+    </wire>
+    <wire>
+      <p1 x="1000" y="220"/>
+      <p2 x="1020" y="220"/>
+    </wire>
+    <wire>
+      <p1 x="1200" y="220"/>
+      <p2 x="1220" y="220"/>
+    </wire>
+    <wire>
+      <p1 x="1420" y="220"/>
+      <p2 x="1440" y="220"/>
+    </wire>
+    <wire>
+      <p1 x="600" y="380"/>
+      <p2 x="740" y="380"/>
+    </wire>
+    <wire>
+      <p1 x="760" y="380"/>
+      <p2 x="780" y="380"/>
+    </wire>
+    <wire>
+      <p1 x="1000" y="380"/>
+      <p2 x="1020" y="380"/>
+    </wire>
+    <wire>
+      <p1 x="1200" y="380"/>
+      <p2 x="1220" y="380"/>
+    </wire>
+    <wire>
+      <p1 x="1420" y="380"/>
+      <p2 x="1440" y="380"/>
+    </wire>
+    <wire>
+      <p1 x="640" y="220"/>
+      <p2 x="640" y="300"/>
+    </wire>
+    <wire>
+      <p1 x="1120" y="560"/>
+      <p2 x="1120" y="600"/>
+    </wire>
+    <wire>
+      <p1 x="580" y="280"/>
+      <p2 x="580" y="420"/>
+    </wire>
+    <wire>
+      <p1 x="680" y="180"/>
+      <p2 x="680" y="220"/>
+    </wire>
+    <wire>
+      <p1 x="200" y="140"/>
+      <p2 x="200" y="160"/>
+    </wire>
+    <wire>
+      <p1 x="200" y="200"/>
+      <p2 x="200" y="220"/>
+    </wire>
+    <wire>
+      <p1 x="1100" y="620"/>
+      <p2 x="1100" y="640"/>
+    </wire>
+    <wire>
+      <p1 x="620" y="240"/>
+      <p2 x="620" y="340"/>
+    </wire>
+    <wire>
+      <p1 x="720" y="60"/>
+      <p2 x="720" y="140"/>
+    </wire>
+    <wire>
+      <p1 x="560" y="140"/>
+      <p2 x="560" y="160"/>
+    </wire>
+    <wire>
+      <p1 x="560" y="300"/>
+      <p2 x="560" y="460"/>
+    </wire>
+    <wire>
+      <p1 x="240" y="240"/>
+      <p2 x="240" y="300"/>
+    </wire>
+    <wire>
+      <p1 x="660" y="200"/>
+      <p2 x="660" y="260"/>
+    </wire>
+    <wire>
+      <p1 x="600" y="260"/>
+      <p2 x="600" y="380"/>
+    </wire>
+    <wire>
+      <p1 x="1080" y="560"/>
+      <p2 x="1080" y="600"/>
+    </wire>
+    <wire>
+      <p1 x="540" y="60"/>
+      <p2 x="540" y="140"/>
+    </wire>
+    <wire>
+      <p1 x="540" y="320"/>
+      <p2 x="540" y="640"/>
+    </wire>
+    <wire>
+      <p1 x="700" y="140"/>
+      <p2 x="700" y="180"/>
+    </wire>
+    <wire>
+      <p1 x="220" y="100"/>
+      <p2 x="220" y="140"/>
+    </wire>
+    <wire>
+      <p1 x="220" y="220"/>
+      <p2 x="220" y="260"/>
+    </wire>
+  </wires>
+  <measurementOrdering/>
+</circuit>
